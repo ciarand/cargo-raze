@@ -28,12 +28,15 @@ rust_binary(
 genrule(
     name = "{{ crate_name_sanitized  }}_build_script_executor",
     srcs = glob(["*", "**/*.rs"]),
-    outs = ["{{ crate_name_sanitized  }}_out_dir_outputs.tar.gz"],
+    outs = [
+      "{{ crate_name_sanitized  }}_out_dir_outputs.tar.gz",
+      "{{ crate_name_sanitized }}_cargo_instructions.txt",
+    ],
     tools = [
       ":{{ crate_name_sanitized  }}_build_script",
     ],
     tags = ["no-sandbox"],
-    cmd = "mkdir -p $$(dirname $@)/{{ crate_name_sanitized}}_out_dir_outputs/;"
+    cmd = "mkdir -p $OUTS/{{ crate_name_sanitized}}_out_dir_outputs/;"
         + " (export CARGO_MANIFEST_DIR=\"$$PWD/$$(dirname $(location :Cargo.toml))\";"
         # TODO(acmcarther): This needs to be revisited as part of the cross compilation story.
         #                   See also: https://github.com/google/cargo-raze/pull/54
@@ -42,11 +45,14 @@ genrule(
         {%- for feature in crate.features %}
         + " export CARGO_FEATURE_{{ feature | upper | replace(from="-", to="_") }}=1;"
         {%- endfor %}
-        + " export OUT_DIR=$$PWD/$$(dirname $@)/{{ crate_name_sanitized }}_out_dir_outputs;"
+        + " export OUT_DIR=$$PWD/$OUTS/{{ crate_name_sanitized }}_out_dir_outputs;"
         + " export BINARY_PATH=\"$$PWD/$(location :{{ crate_name_sanitized }}_build_script)\";"
-        + " export OUT_TAR=$$PWD/$@;"
+        + " export OUT_TAR=$$PWD/$OUTS/{{ crate_name_sanitized  }}_out_dir_outputs.tar.gz;"
         {%- for environment_variable in crate.raze_settings.buildrs_additional_environment_variables %}
         + " export {{ environment_variable }};"
         {%- endfor %}
-        + " cd $$(dirname $(location :Cargo.toml)) && $$BINARY_PATH && tar -czf $$OUT_TAR -C $$OUT_DIR .)"
+        + " cd $$(dirname $(location :Cargo.toml)) \\"
+        # run the build script and record the output for later use
+        + "   && $$BINARY_PATH > '$OUTS/{{ crate_name_sanitized }}_cargo_instructions.txt' \\"
+        + "   && tar -czf $$OUT_TAR -C $$OUT_DIR .)"
 )
